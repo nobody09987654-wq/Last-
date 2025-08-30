@@ -1,0 +1,4 @@
+# filepath: /workspaces/Last-/requirements.txt
+python-telegram-bot==20.7
+SQLAlchemy
+psycopg2-binary
