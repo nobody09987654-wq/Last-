@@ -1,5 +1,6 @@
 # filepath: main.py
 import os
+from datetime import datetime
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -16,9 +17,8 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-from datetime import datetime
 
-# Bot token va admin ID Render env’dan olinadi
+# Bot token va admin ID Render environment’dan olinadi
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
@@ -155,7 +155,7 @@ async def collect_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"• 🎂 Yosh: {context.user_data.get('age')}\n"
             f"• 📱 Telefon: {context.user_data.get('phone')}"
         )
-        await update.message.reply_text(text, reply_markup=kb_review(), parse_mode="Markdown", reply_markup=kb_review())
+        await update.message.reply_text(text, reply_markup=kb_review(), parse_mode="Markdown")
 
 # ----------------------- Main -----------------------
 def main():
