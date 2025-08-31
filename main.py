@@ -1,13 +1,11 @@
 # filepath: main.py
 import os
-from datetime import datetime
 from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
 )
 from telegram.ext import (
     Application,
@@ -17,8 +15,9 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from datetime import datetime
 
-# Bot token va admin ID Render environment’dan olinadi
+# Render environment variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
@@ -64,13 +63,11 @@ async def cb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
 
-    # Bekor qilish
     if data == "reg:cancel":
         context.user_data.clear()
         await query.edit_message_text("❌ Ro'yxatdan o'tish bekor qilindi.")
         return
 
-    # Orqaga
     if data == "reg:back":
         step = context.user_data.get("prev_step")
         if step == "ask_name":
@@ -92,13 +89,11 @@ async def cb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["step"] = "ask_phone"
         return
 
-    # Ro'yxatdan boshlash
     if data == "reg:start":
         await query.edit_message_text("✍️ Iltimos, to'liq ism-familiyangizni kiriting:", reply_markup=kb_back_cancel())
         context.user_data["step"] = "ask_name"
         return
 
-    # Tasdiqlash
     if data == "reg:confirm":
         user_data = context.user_data
         admin_text = (
@@ -113,7 +108,6 @@ async def cb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         return
 
-    # Qayta tahrirlash
     if data == "reg:edit":
         await query.edit_message_text("✏️ Ma’lumotlarni qayta kiriting. Ism-familiya bilan boshlang:", reply_markup=kb_back_cancel())
         context.user_data["step"] = "ask_name"
