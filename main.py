@@ -1,125 +1,172 @@
 # filepath: main.py
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
 )
-from models import Registration, SessionLocal
-from dotenv import load_dotenv
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
+from datetime import datetime
 
-# .env faylni yuklash
-load_dotenv()
-
+# Bot token va admin ID Render env’dan olinadi
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
-# /start komandasi
+# ----------------------- Keyboards -----------------------
+def kb_register():
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🚀 Ro'yxatdan o'tish", callback_data="reg:start")
+    ]])
+
+def kb_review():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Tasdiqlash", callback_data="reg:confirm"),
+            InlineKeyboardButton("✏️ O'zgartirish", callback_data="reg:edit"),
+        ],
+        [InlineKeyboardButton("❌ Bekor qilish", callback_data="reg:cancel")]
+    ])
+
+def kb_back_cancel(back_data="reg:back"):
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("⬅️ Ortga", callback_data=back_data),
+            InlineKeyboardButton("❌ Bekor qilish", callback_data="reg:cancel")
+        ]
+    ])
+
+# ----------------------- Handlers -----------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("Ro‘yxatdan o‘tish 📝", callback_data="register")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "👋 Assalomu alaykum!\n\n"
-        "O‘quv kursimizga xush kelibsiz.\n"
-        "Ro‘yxatdan o‘tish uchun tugmani bosing 👇",
-        reply_markup=reply_markup
+    welcome = (
+        "Assalomu alaykum!\n"
+        "*ITeach Academy*ga xush kelibsiz! 🎓\n\n"
+        "Bizning o'quv jamoamizga qo'shilish va ro'yxatdan o'tish uchun pastdagi tugmani bosing."
     )
+    await update.message.reply_text(
+        welcome,
+        reply_markup=kb_register(),
+        parse_mode="Markdown"
+    )
+    context.user_data.clear()
 
-
-# Callback handler
 async def cb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    data = query.data
 
-    if query.data == "register":
-        await query.edit_message_text("📝 Ismingizni kiriting:")
+    # Bekor qilish
+    if data == "reg:cancel":
+        context.user_data.clear()
+        await query.edit_message_text("❌ Ro'yxatdan o'tish bekor qilindi.")
+        return
+
+    # Orqaga
+    if data == "reg:back":
+        step = context.user_data.get("prev_step")
+        if step == "ask_name":
+            await query.edit_message_text("✍️ Iltimos, to'liq ism-familiyangizni kiriting:", reply_markup=kb_back_cancel())
+            context.user_data["step"] = "ask_name"
+        elif step == "ask_age":
+            await query.edit_message_text("🎂 Yoshingizni kiriting:", reply_markup=kb_back_cancel())
+            context.user_data["step"] = "ask_age"
+        elif step == "ask_phone":
+            kb = ReplyKeyboardMarkup(
+                [[KeyboardButton("📱 Raqamni ulashish", request_contact=True)]],
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+            await query.edit_message_text(
+                "📞 Telefon raqamingizni kiriting yoki pastdagi tugma orqali yuboring:",
+                reply_markup=kb
+            )
+            context.user_data["step"] = "ask_phone"
+        return
+
+    # Ro'yxatdan boshlash
+    if data == "reg:start":
+        await query.edit_message_text("✍️ Iltimos, to'liq ism-familiyangizni kiriting:", reply_markup=kb_back_cancel())
         context.user_data["step"] = "ask_name"
+        return
 
+    # Tasdiqlash
+    if data == "reg:confirm":
+        user_data = context.user_data
+        admin_text = (
+            f"🔔 Yangi o'quvchi ro'yxatdan o'tdi\n"
+            f"👤 Ism: {user_data.get('full_name')}\n"
+            f"🎂 Yosh: {user_data.get('age')}\n"
+            f"📱 Telefon: {user_data.get('phone')}\n"
+            f"📅 Sana: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_text)
+        await query.edit_message_text("🎉 Ro'yxatdan o'tish muvaffaqiyatli!\nTez orada siz bilan bog'lanamiz.")
+        context.user_data.clear()
+        return
 
-# Foydalanuvchi ma'lumotlarini yig‘ish
+    # Qayta tahrirlash
+    if data == "reg:edit":
+        await query.edit_message_text("✏️ Ma’lumotlarni qayta kiriting. Ism-familiya bilan boshlang:", reply_markup=kb_back_cancel())
+        context.user_data["step"] = "ask_name"
+        return
+
+# ----------------------- Collect user input -----------------------
 async def collect_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     step = context.user_data.get("step")
 
     if step == "ask_name":
         context.user_data["full_name"] = update.message.text
+        context.user_data["prev_step"] = "ask_name"
         context.user_data["step"] = "ask_age"
-        await update.message.reply_text("📅 Yoshingizni kiriting:")
+        await update.message.reply_text("🎂 Yoshingizni kiriting:", reply_markup=kb_back_cancel())
 
     elif step == "ask_age":
-        if not update.message.text.isdigit():
-            await update.message.reply_text("❌ Yoshingiz raqamda bo‘lishi kerak. Qaytadan kiriting:")
-            return
-        context.user_data["age"] = int(update.message.text)
+        context.user_data["age"] = update.message.text
+        context.user_data["prev_step"] = "ask_age"
         context.user_data["step"] = "ask_phone"
-        await update.message.reply_text("📞 Telefon raqamingizni kiriting (masalan: +998901234567):")
+        kb = ReplyKeyboardMarkup(
+            [[KeyboardButton("📱 Raqamni ulashish", request_contact=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+        await update.message.reply_text(
+            "📞 Telefon raqamingizni kiriting yoki pastdagi tugma orqali yuboring:",
+            reply_markup=kb
+        )
 
     elif step == "ask_phone":
-        context.user_data["phone"] = update.message.text
+        phone = update.message.contact.phone_number if update.message.contact else update.message.text
+        context.user_data["phone"] = phone
+        context.user_data["prev_step"] = "ask_phone"
+        context.user_data["step"] = "review"
 
-        # --- Ma'lumotlarni DB ga yozish ---
-        session = SessionLocal()
-        try:
-            reg = Registration(
-                tg_user_id=update.message.from_user.id,
-                username=update.message.from_user.username,
-                first_name=update.message.from_user.first_name,
-                last_name=update.message.from_user.last_name,
-                full_name=context.user_data["full_name"],
-                age=context.user_data["age"],
-                phone=context.user_data["phone"],
-                course="Python",       # vaqtincha fixed
-                level="Beginner",      # vaqtincha fixed
-                section="Morning"      # vaqtincha fixed
-            )
-            session.add(reg)
-            session.commit()
+        text = (
+            f"🧾 Ma'lumotlaringiz:\n"
+            f"• 👤 Ism-familiya: {context.user_data.get('full_name')}\n"
+            f"• 🎂 Yosh: {context.user_data.get('age')}\n"
+            f"• 📱 Telefon: {context.user_data.get('phone')}"
+        )
+        await update.message.reply_text(text, reply_markup=kb_review(), parse_mode="Markdown", reply_markup=kb_review())
 
-            await update.message.reply_text(
-                "✅ Tabriklaymiz! Siz muvaffaqiyatli ro‘yxatdan o‘tdingiz."
-            )
-
-            # Adminni xabardor qilish
-            if ADMIN_ID:
-                try:
-                    await context.bot.send_message(
-                        chat_id=int(ADMIN_ID),
-                        text=(
-                            f"📥 Yangi ro‘yxatdan o‘tuvchi:\n\n"
-                            f"👤 Ism: {reg.full_name}\n"
-                            f"📅 Yosh: {reg.age}\n"
-                            f"📞 Telefon: {reg.phone}\n"
-                            f"🆔 UserID: {reg.tg_user_id}"
-                        )
-                    )
-                except Exception as e:
-                    print(f"Adminni xabardor qilishda xato: {e}")
-
-        except Exception as e:
-            session.rollback()
-            await update.message.reply_text(f"❌ Xatolik yuz berdi: {e}")
-        finally:
-            session.close()
-
-        context.user_data.clear()
-
-
-# Botni ishga tushirish
+# ----------------------- Main -----------------------
 def main():
-    if not BOT_TOKEN:
-        raise ValueError("❌ BOT_TOKEN topilmadi. .env faylni tekshiring!")
-
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(cb_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, collect_data))
+    app.add_handler(MessageHandler(filters.CONTACT, collect_data))
 
-    print("🚀 Bot ishga tushdi...")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
